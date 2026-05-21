@@ -1,8 +1,8 @@
-# VoiceClone-GUI — запуск из исходного кода / Running from source
+# VoiceClone-GUI-portable — запуск из исходного кода / Running from source
 
-Это руководство предназначено для запуска программы **VoiceClone-GUI** непосредственно из исходного Python-кода на другом компьютере. Программа выполняет клонирование голоса (XTTS v2), распознавание речи (Whisper) и **офлайн-перевод** распознанного или вводимого текста (Argos Translate) полностью локально.
+Это руководство предназначено для запуска программы **VoiceClone-GUI** непосредственно из исходного Python-кода на другом компьютере. Программа выполняет клонирование голоса (XTTS v2), распознавание речи (Whisper) и **офлайн-перевод** распознанного или вводимого текста (Argos Translate) полностью локально, сохраняя данные в папку программы.
 
-This guide explains how to run **VoiceClone-GUI** directly from the Python source code on another computer. The program performs voice cloning (XTTS v2), speech recognition (Whisper) and **offline translation** of recognized or input text (Argos Translate) entirely locally.
+This guide explains how to run **VoiceClone-GUI** directly from the Python source code on another computer. The program performs voice cloning (XTTS v2), speech recognition (Whisper) and **offline translation** of recognized or input text (Argos Translate) entirely locally, saving all data in program's folder.
 
 ---
 
