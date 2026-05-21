@@ -580,8 +580,8 @@ class App:
     def __init__(self, root):
         self.root = root
         self.root.title(TEXTS["app_title"])
-        self.root.geometry("1400x800")
-        self.root.minsize(1400, 800)
+        self.root.geometry("1600x900")
+        self.root.minsize(1600, 900)
         self.root.resizable(True, True)
 
         # Russian: Инициализация переводчика
