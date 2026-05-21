@@ -1,19 +1,23 @@
 # ============================================================
-# VoiceClone-GUI - main.py
+# VoiceClone-GUI - Портативная версия (main.py)
 # ============================================================
 # Russian / Русский:
 # Программа для распознавания речи (Whisper) и синтеза речи
 # с клонированием голоса (XTTS v2) + офлайн-перевод (Argos Translate).
-# 
+# Все модели и кэш хранятся в папке cache рядом с программой.
+# FFmpeg должен лежать в папке ffmpeg рядом с программой.
+#
 # English / Английский:
 # Speech recognition (Whisper) and speech synthesis with voice
 # cloning (XTTS v2) + offline translation (Argos Translate).
+# All models and cache are stored in the "cache" folder next to the program.
+# FFmpeg must be located in the "ffmpeg" folder next to the program.
 # ============================================================
 
 import sys
 import os
 
-# ========== ПАТЧ ДЛЯ TRANSFORMERS (совместимость с новыми версиями) ==========
+# ========== ПАТЧ ДЛЯ TRANSFORMERS ==========
 # Russian: Патч для совместимости с именованными аргументами
 # English: Patch for compatibility with named arguments
 import transformers.pytorch_utils
@@ -21,10 +25,6 @@ import torch
 
 if not hasattr(transformers.pytorch_utils, 'isin_mps_friendly'):
     def _isin_mps_friendly(*args, **kwargs):
-        """
-        Russian: Универсальная заглушка, поддерживающая позиционные и именованные аргументы.
-        English: Universal stub supporting positional and keyword arguments.
-        """
         a = None
         b = None
         if len(args) >= 2:
@@ -41,11 +41,9 @@ if not hasattr(transformers.pytorch_utils, 'isin_mps_friendly'):
         else:
             raise TypeError(f"Не удалось распознать аргументы / Cannot parse arguments: args={args}, kwargs={kwargs}")
         return torch.isin(a, b)
-    
+
     transformers.pytorch_utils.isin_mps_friendly = _isin_mps_friendly
-    print("✓ Патч для transformers.isin_mps_friendly применен (поддержка keyword arguments)")
-else:
-    print("→ Патч для isin_mps_friendly уже существует, пропускаем.")
+    print("✓ Патч для transformers.isin_mps_friendly применен")
 # ============================================================
 
 # Russian: Автоматическое подтверждение лицензии Coqui TTS
@@ -59,14 +57,34 @@ if getattr(sys, 'frozen', False):
 else:
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# Russian: Папки для пользовательских файлов (только они создаются рядом с программой)
-# English: Folders for user files (only these are created next to the program)
+# ========== НАСТРОЙКИ ПОРТАТИВНОСТИ ==========
+# Russian: Все модели и кэш будут сохраняться в папку cache рядом с программой
+# English: All models and cache will be stored in the "cache" folder next to the program
+CACHE_DIR = os.path.join(BASE_DIR, "cache")
+os.makedirs(CACHE_DIR, exist_ok=True)
+
+# Russian: Перенаправляем кэш Hugging Face, Transformers, TTS
+# English: Redirect Hugging Face, Transformers, TTS cache
+os.environ['HF_HOME'] = os.path.join(CACHE_DIR, "hf_cache")
+os.environ['TRANSFORMERS_CACHE'] = os.path.join(CACHE_DIR, "hf_cache")
+os.environ['HUGGINGFACE_HUB_CACHE'] = os.path.join(CACHE_DIR, "hf_cache")
+os.environ['TTS_HOME'] = os.path.join(CACHE_DIR, "tts_cache")
+
+# Russian: Создаём папку для пользовательских файлов
+# English: Create folders for user files
 INPUT_DIR = os.path.join(BASE_DIR, "input")
 OUTPUT_DIR = os.path.join(BASE_DIR, "output")
 REF_SAMPLES_DIR = os.path.join(INPUT_DIR, "reference_samples")
 os.makedirs(INPUT_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 os.makedirs(REF_SAMPLES_DIR, exist_ok=True)
+
+# Russian: Добавляем локальную папку ffmpeg в PATH (если существует)
+# English: Add local ffmpeg folder to PATH (if exists)
+FFMPEG_DIR = os.path.join(BASE_DIR, "ffmpeg")
+if os.path.exists(FFMPEG_DIR):
+    os.environ["PATH"] = FFMPEG_DIR + os.pathsep + os.environ.get("PATH", "")
+    print(f"Локальный FFmpeg добавлен в PATH: {FFMPEG_DIR}")
 
 # ============================================================
 # Russian: ВСЕ ТЕКСТОВЫЕ СТРОКИ ПРОГРАММЫ (для удобства локализации)
@@ -75,8 +93,6 @@ os.makedirs(REF_SAMPLES_DIR, exist_ok=True)
 TEXTS = {
     # Main window / Главное окно
     "app_title": "VoiceClone-GUI: распознавание и синтез речи с переводом",
-    
-    # Left panel: speech recognition / Левая панель: распознавание речи
     "left_panel_title": "Распознавание речи",
     "mode_file": "Выбрать файл",
     "mode_record": "Записать файл",
@@ -96,8 +112,6 @@ TEXTS = {
     "stt_status_error": "Ошибка",
     "original_text_frame": "Распознанный текст",
     "translated_text_frame": "Перевод",
-    
-    # Right panel: speech synthesis / Правая панель: синтез речи
     "right_panel_title": "Синтез речи",
     "synth_mode_file": "Выбрать файл",
     "synth_mode_text": "Ввести текст",
@@ -119,48 +133,34 @@ TEXTS = {
     "player_no_file": "Файл не выбран",
     "play_button": "Воспроизвести",
     "stop_button": "Остановить",
-    
-    # Translation languages / Языки перевода
     "translation_lang_frame": "Перевод распознанного текста",
     "translation_lang_label": "Язык перевода:",
     "synthesis_lang_label": "Язык синтеза:",
-    
-    # Dialog messages / Сообщения диалогов
     "warning_title": "Предупреждение",
     "error_title": "Критическая ошибка",
     "info_title": "Информация",
     "question_title": "Подтверждение",
-    
     "warning_no_audio_file": "Аудиофайл не найден.",
     "warning_no_text_file": "Файл с текстом не найден.",
     "warning_no_reference": "Образец голоса не найден.",
     "warning_enter_text": "Введите текст для озвучки.",
     "warning_no_file_to_play": "Нет файла для воспроизведения.",
-    
     "error_read_file": "Не удалось прочитать файл: {}",
     "error_overwrite_file": "Не удалось перезаписать файл {}. Возможно, он открыт другой программой.",
     "error_play_audio": "Не удалось воспроизвести: {}",
     "error_tts_load": "Ошибка загрузки TTS:\n{}",
-    
     "question_install_package": "Для перевода с {} на {} требуется загрузить языковой пакет.\nЭто потребует подключения к интернету (однократно).\nУстановить сейчас?",
     "package_install_success": "Пакет для перевода {} -> {} успешно установлен.",
     "package_install_fail": "Не удалось установить пакет: {}",
-    
     "stt_fallback_translation_unavailable": "(Перевод недоступен: пакет не установлен)",
-    
-    # Default file names / Имена файлов по умолчанию
     "default_output_txt": "output_{}.txt",
     "default_output_wav": "output_{}.wav",
     "default_reference_voice": "my_voice.wav",
     "recorded_input_prefix": "recorded_input_",
     "recorded_reference_prefix": "recorded_reference_",
-    
-    # Record status / Статус записи
     "record_status_recording": "Запись...",
     "record_status_no_data": "Нет данных",
-    
-    # FFmpeg message / Сообщение об FFmpeg
-    "ffmpeg_help": "\n" + "="*60 + "\nРЕШЕНИЕ ПРОБЛЕМЫ С FFMPEG:\n" + "="*60 + "\n1. Установите FFmpeg (full-shared версия) глобально.\n2. Убедитесь, что команда 'ffmpeg' доступна.\n" + "="*60 + "\n"
+    "ffmpeg_help": "\n" + "="*60 + "\nРЕШЕНИЕ ПРОБЛЕМЫ С FFMPEG:\n" + "="*60 + "\n1. Установите FFmpeg (full-shared версия) в папку ffmpeg рядом с программой.\n2. Убедитесь, что в папке ffmpeg есть все DLL и ffmpeg.exe.\n" + "="*60 + "\n"
 }
 
 # ============================================================
@@ -188,10 +188,9 @@ import argostranslate.translate
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
-# Russian: Отключаем предупреждения, инициализируем pygame микшер
-# English: Disable warnings, initialize pygame mixer
 warnings.filterwarnings('ignore')
 pygame.mixer.init()
+
 
 # ============================================================
 # Russian: Функция проверки FFmpeg
@@ -204,49 +203,41 @@ def check_ffmpeg():
         print(TEXTS["ffmpeg_help"])
         raise RuntimeError("FFmpeg not found")
 
+
 # ============================================================
 # Russian: КЛАСС ПЕРЕВОДА (Argos Translate)
 # English: TRANSLATION CLASS (Argos Translate)
 # ============================================================
 class Translator:
-    """Russian: Офлайн-переводчик на основе Argos Translate.
-       English: Offline translator based on Argos Translate."""
-    
-    # Russian: Словарь поддерживаемых языков (название -> коды для Whisper, TTS и Argos)
-    # English: Dictionary of supported languages (name -> codes for Whisper, TTS and Argos)
     SUPPORTED_LANGUAGES = {
-        "Русский":     {"whisper": "ru", "tts": "ru", "argos": "ru"},
-        "Английский":  {"whisper": "en", "tts": "en", "argos": "en"},
-        "Испанский":   {"whisper": "es", "tts": "es", "argos": "es"},
+        "Русский": {"whisper": "ru", "tts": "ru", "argos": "ru"},
+        "Английский": {"whisper": "en", "tts": "en", "argos": "en"},
+        "Испанский": {"whisper": "es", "tts": "es", "argos": "es"},
         "Французский": {"whisper": "fr", "tts": "fr", "argos": "fr"},
-        "Немецкий":    {"whisper": "de", "tts": "de", "argos": "de"},
+        "Немецкий": {"whisper": "de", "tts": "de", "argos": "de"},
         "Итальянский": {"whisper": "it", "tts": "it", "argos": "it"},
-        "Португальский":{"whisper": "pt", "tts": "pt", "argos": "pt"},
-        "Польский":    {"whisper": "pl", "tts": "pl", "argos": "pl"},
-        "Турецкий":    {"whisper": "tr", "tts": "tr", "argos": "tr"},
-        "Китайский":   {"whisper": "zh", "tts": "zh-cn", "argos": "zh"},
-        "Японский":    {"whisper": "ja", "tts": "ja", "argos": "ja"},
-        "Корейский":   {"whisper": "ko", "tts": "ko", "argos": "ko"},
+        "Португальский": {"whisper": "pt", "tts": "pt", "argos": "pt"},
+        "Польский": {"whisper": "pl", "tts": "pl", "argos": "pl"},
+        "Турецкий": {"whisper": "tr", "tts": "tr", "argos": "tr"},
+        "Китайский": {"whisper": "zh", "tts": "zh-cn", "argos": "zh"},
+        "Японский": {"whisper": "ja", "tts": "ja", "argos": "ja"},
+        "Корейский": {"whisper": "ko", "tts": "ko", "argos": "ko"},
         "Голландский": {"whisper": "nl", "tts": "nl", "argos": "nl"},
-        "Чешский":     {"whisper": "cs", "tts": "cs", "argos": "cs"},
-        "Арабский":    {"whisper": "ar", "tts": "ar", "argos": "ar"},
-        "Венгерский":  {"whisper": "hu", "tts": "hu", "argos": "hu"},
-        "Хинди":       {"whisper": "hi", "tts": "hi", "argos": "hi"},
+        "Чешский": {"whisper": "cs", "tts": "cs", "argos": "cs"},
+        "Арабский": {"whisper": "ar", "tts": "ar", "argos": "ar"},
+        "Венгерский": {"whisper": "hu", "tts": "hu", "argos": "hu"},
+        "Хинди": {"whisper": "hi", "tts": "hi", "argos": "hi"},
     }
 
     def __init__(self):
-        self.installed_packages = {}  # Russian: кэш установленных пакетов / English: cache of installed packages
+        self.installed_packages = {}
 
     def _get_language_code(self, lang_name, service):
-        """Russian: Возвращает код языка для указанного сервиса (whisper/tts/argos).
-           English: Returns language code for the given service (whisper/tts/argos)."""
         if lang_name not in self.SUPPORTED_LANGUAGES:
             return None
         return self.SUPPORTED_LANGUAGES[lang_name].get(service)
 
     def is_package_installed(self, from_lang, to_lang):
-        """Russian: Проверяет, установлен ли пакет перевода для пары языков.
-           English: Checks whether translation package for language pair is installed."""
         from_code = self._get_language_code(from_lang, "argos")
         to_code = self._get_language_code(to_lang, "argos")
         if not from_code or not to_code:
@@ -264,8 +255,6 @@ class Translator:
         return False
 
     def install_package(self, from_lang, to_lang, progress_callback=None):
-        """Russian: Загружает и устанавливает пакет перевода для пары языков (требуется интернет).
-           English: Downloads and installs translation package for language pair (internet required)."""
         from_code = self._get_language_code(from_lang, "argos")
         to_code = self._get_language_code(to_lang, "argos")
         if not from_code or not to_code:
@@ -289,8 +278,6 @@ class Translator:
         return True
 
     def translate(self, text, from_lang, to_lang):
-        """Russian: Переводит текст с одного языка на другой.
-           English: Translates text from one language to another."""
         if not text or not text.strip():
             return text
         if from_lang == to_lang:
@@ -303,6 +290,7 @@ class Translator:
             raise RuntimeError(f"Пакет перевода {from_lang} -> {to_lang} не установлен")
         translation = argostranslate.translate.translate(text, from_code, to_code)
         return translation
+
 
 # ============================================================
 # Russian: Класс распознавания речи (Whisper + VAD)
@@ -319,11 +307,13 @@ class SpeechRecognizer:
     def load_model(self):
         if self.model is not None:
             return
+        whisper_cache = os.path.join(CACHE_DIR, "whisper_cache")
+        os.makedirs(whisper_cache, exist_ok=True)
         print(f"Загрузка модели Whisper ({self.model_size})...")
         self.model = whisper.load_model(
             self.model_size,
             device=self.device,
-            download_root=None
+            download_root=whisper_cache
         )
         print("Модель загружена.")
 
@@ -375,29 +365,25 @@ class SpeechRecognizer:
     def recognize(self, audio_path):
         if not os.path.exists(audio_path):
             raise FileNotFoundError(f"Аудиофайл не найден: {audio_path}")
-
         if self.model is None:
             raise RuntimeError("Модель не загружена. Сначала вызовите load_model().")
-
         audio, sr = self._load_audio(audio_path)
         audio = self._vad_trim(audio, sr)
         if len(audio) < 0.5 * sr:
             print("VAD не обнаружил речи, используется оригинальная запись.")
             audio, sr = self._load_audio(audio_path)
         audio = self._normalize_loudness(audio)
-
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
             temp_path = f.name
         sf.write(temp_path, audio, sr, subtype='PCM_16')
-
         try:
-            # Russian: Всегда распознаём как русский / Always recognize as Russian
             result = self.model.transcribe(temp_path, language="ru", fp16=torch.cuda.is_available())
             text = result["text"].strip()
         finally:
             if os.path.exists(temp_path):
                 os.remove(temp_path)
         return text
+
 
 # ============================================================
 # Russian: Класс синтеза речи (XTTS v2)
@@ -499,6 +485,7 @@ class VoiceCloningSystem:
         else:
             raise RuntimeError("Файл не был создан")
 
+
 # ============================================================
 # Russian: Класс для записи с микрофона
 # English: Recorder class (microphone)
@@ -530,7 +517,6 @@ class Recorder:
             def callback(indata, frames, time, status):
                 if self.recording:
                     self.audio_data.append(indata.copy())
-
             self.stream = sd.InputStream(samplerate=self.sample_rate,
                                          channels=self.channels,
                                          callback=callback)
@@ -572,6 +558,7 @@ class Recorder:
             self.status_entry.insert(0, TEXTS["record_status_no_data"])
             self.status_entry.config(state='readonly')
 
+
 # ============================================================
 # Russian: Основной GUI (графический интерфейс)
 # English: Main GUI
@@ -584,12 +571,7 @@ class App:
         self.root.minsize(1600, 900)
         self.root.resizable(True, True)
 
-        # Russian: Инициализация переводчика
-        # English: Initialize translator
         self.translator = Translator()
-
-        # Russian: Переменные
-        # English: Variables
         self.stt_input_path = tk.StringVar()
         self.stt_output_path = tk.StringVar()
         self.tts_text_file = tk.StringVar()
@@ -616,8 +598,7 @@ class App:
 
         self.create_widgets()
 
-        # Russian: Загрузка TTS в фоновом потоке
-        # English: Load TTS in background thread
+        # Загрузка TTS в фоне
         self.loading_frame = ttk.Frame(self.root)
         self.loading_frame.pack(fill=tk.X, pady=5)
         self.loading_label = ttk.Label(self.loading_frame, text=TEXTS["tts_status_loading_model"])
@@ -625,11 +606,9 @@ class App:
         self.progress = ttk.Progressbar(self.loading_frame, mode='indeterminate')
         self.progress.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
         self.progress.start()
-
         threading.Thread(target=self.load_tts_model, daemon=True).start()
 
-        # Russian: Отслеживание изменений
-        # English: Trace changes
+        # Отслеживание изменений
         self.stt_input_path.trace_add('write', lambda *a: self.update_buttons_state())
         self.tts_reference_path.trace_add('write', lambda *a: self.update_buttons_state())
         self.rec_mode.trace_add('write', lambda *a: self.update_rec_mode())
@@ -639,22 +618,19 @@ class App:
 
         self.loading_whisper_frame = None
 
-    # -------------------- GUI CREATION / СОЗДАНИЕ ИНТЕРФЕЙСА --------------------
+    # -------------------- GUI creation / Создание интерфейса --------------------
     def create_widgets(self):
         main_frame = ttk.Frame(self.root, padding="10")
         main_frame.pack(fill=tk.BOTH, expand=True)
 
-        # === Russian: Левая колонка: распознавание речи ===
-        # === English: Left panel: speech recognition ===
+        # Левая колонка
         left_frame = ttk.LabelFrame(main_frame, text=TEXTS["left_panel_title"], padding="10")
         left_frame.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
 
         mode_frame = ttk.Frame(left_frame)
         mode_frame.grid(row=0, column=0, columnspan=4, sticky="w", pady=2)
-        ttk.Radiobutton(mode_frame, text=TEXTS["mode_file"], variable=self.rec_mode,
-                        value="file").pack(side=tk.LEFT, padx=5)
-        ttk.Radiobutton(mode_frame, text=TEXTS["mode_record"], variable=self.rec_mode,
-                        value="record").pack(side=tk.LEFT, padx=5)
+        ttk.Radiobutton(mode_frame, text=TEXTS["mode_file"], variable=self.rec_mode, value="file").pack(side=tk.LEFT, padx=5)
+        ttk.Radiobutton(mode_frame, text=TEXTS["mode_record"], variable=self.rec_mode, value="record").pack(side=tk.LEFT, padx=5)
 
         ttk.Label(left_frame, text=TEXTS["file_label"]).grid(row=1, column=0, sticky="w", pady=2)
         self.entry_stt_input = ttk.Entry(left_frame, textvariable=self.stt_input_path, width=50)
@@ -670,22 +646,19 @@ class App:
         self.record_btn.grid(row=2, column=2, padx=2)
 
         ttk.Label(left_frame, text=TEXTS["output_file_label"]).grid(row=3, column=0, sticky="w", pady=2)
-        entry_stt_output = ttk.Entry(left_frame, textvariable=self.stt_output_path, width=50)
-        entry_stt_output.grid(row=3, column=1, padx=5, pady=2)
+        entry_stt_out = ttk.Entry(left_frame, textvariable=self.stt_output_path, width=50)
+        entry_stt_out.grid(row=3, column=1, padx=5, pady=2)
         ttk.Button(left_frame, text=TEXTS["browse_button"],
                    command=lambda: self.select_save_file(self.stt_output_path, [("Текстовые файлы", "*.txt")], ".txt")).grid(row=3, column=2, padx=2)
 
-        # Russian: Модель Whisper
-        # English: Whisper model
+        # Модель Whisper
         model_frame = ttk.LabelFrame(left_frame, text=TEXTS["whisper_model_frame"], padding="5")
         model_frame.grid(row=4, column=0, columnspan=4, sticky="ew", pady=5)
         sizes = [("tiny", "tiny"), ("base", "base"), ("small", "small"), ("medium", "medium"), ("large", "large")]
         for i, (label, val) in enumerate(sizes):
-            rb = ttk.Radiobutton(model_frame, text=label, variable=self.stt_model_size, value=val)
-            rb.grid(row=0, column=i, padx=5, sticky="w")
+            ttk.Radiobutton(model_frame, text=label, variable=self.stt_model_size, value=val).grid(row=0, column=i, padx=5, sticky="w")
 
-        # Russian: Выбор языка перевода для распознанного текста
-        # English: Translation language selection for recognized text
+        # Выбор языка перевода
         lang_frame = ttk.LabelFrame(left_frame, text=TEXTS["translation_lang_frame"], padding="5")
         lang_frame.grid(row=5, column=0, columnspan=4, sticky="ew", pady=5)
         ttk.Label(lang_frame, text=TEXTS["translation_lang_label"]).grid(row=0, column=0, sticky="w", padx=5)
@@ -698,6 +671,7 @@ class App:
         self.recognize_btn.grid(row=6, column=1, pady=10)
         ttk.Label(left_frame, textvariable=self.stt_status).grid(row=6, column=2, sticky="w")
 
+        # Текстовые поля
         text_frame = ttk.LabelFrame(left_frame, text=TEXTS["original_text_frame"], padding="5")
         text_frame.grid(row=7, column=0, columnspan=4, sticky="nsew", pady=5)
         self.recognized_text = tk.Text(text_frame, height=6, wrap=tk.WORD, state=tk.DISABLED)
@@ -712,8 +686,7 @@ class App:
         left_frame.rowconfigure(8, weight=1)
         left_frame.columnconfigure(1, weight=1)
 
-        # === Russian: Правая колонка: синтез речи ===
-        # === English: Right panel: speech synthesis ===
+        # Правая колонка
         right_frame = ttk.Frame(main_frame)
         right_frame.grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
 
@@ -722,10 +695,8 @@ class App:
 
         mode_synth_frame = ttk.Frame(tts_frame)
         mode_synth_frame.grid(row=0, column=0, columnspan=3, sticky="w", pady=2)
-        ttk.Radiobutton(mode_synth_frame, text=TEXTS["synth_mode_file"], variable=self.synth_mode,
-                        value="file").pack(side=tk.LEFT, padx=5)
-        ttk.Radiobutton(mode_synth_frame, text=TEXTS["synth_mode_text"], variable=self.synth_mode,
-                        value="text").pack(side=tk.LEFT, padx=5)
+        ttk.Radiobutton(mode_synth_frame, text=TEXTS["synth_mode_file"], variable=self.synth_mode, value="file").pack(side=tk.LEFT, padx=5)
+        ttk.Radiobutton(mode_synth_frame, text=TEXTS["synth_mode_text"], variable=self.synth_mode, value="text").pack(side=tk.LEFT, padx=5)
 
         ttk.Label(tts_frame, text=TEXTS["text_file_label"]).grid(row=1, column=0, sticky="w", pady=2)
         self.entry_tts_file = ttk.Entry(tts_frame, textvariable=self.tts_text_file, width=50)
@@ -738,25 +709,22 @@ class App:
         self.tts_text_entry = tk.Text(tts_frame, height=8, width=62, state=tk.NORMAL)
         self.tts_text_entry.grid(row=2, column=1, columnspan=2, pady=2, sticky="we")
 
+        # Выбор языка синтеза
         synth_lang_frame = ttk.Frame(tts_frame)
         synth_lang_frame.grid(row=3, column=0, columnspan=3, sticky="w", pady=5)
         ttk.Label(synth_lang_frame, text=TEXTS["synthesis_lang_label"]).pack(side=tk.LEFT, padx=5)
-        tts_lang_list = list(self.translator.SUPPORTED_LANGUAGES.keys())
-        self.tts_lang_combo = ttk.Combobox(synth_lang_frame, textvariable=self.tts_target_lang, values=tts_lang_list, state="readonly", width=15)
+        self.tts_lang_combo = ttk.Combobox(synth_lang_frame, textvariable=self.tts_target_lang, values=lang_list, state="readonly", width=15)
         self.tts_lang_combo.pack(side=tk.LEFT, padx=5)
         self.tts_lang_combo.bind("<<ComboboxSelected>>", lambda e: self.update_buttons_state())
 
-        # Russian: Образец голоса
-        # English: Voice sample
+        # Образец голоса
         ref_frame = ttk.LabelFrame(right_frame, text=TEXTS["voice_sample_frame"], padding="10")
         ref_frame.pack(fill=tk.X, pady=5)
 
         mode_ref_frame = ttk.Frame(ref_frame)
         mode_ref_frame.grid(row=0, column=0, columnspan=3, sticky="w", pady=2)
-        ttk.Radiobutton(mode_ref_frame, text=TEXTS["mode_file"], variable=self.ref_mode,
-                        value="file").pack(side=tk.LEFT, padx=5)
-        ttk.Radiobutton(mode_ref_frame, text=TEXTS["mode_record"], variable=self.ref_mode,
-                        value="record").pack(side=tk.LEFT, padx=5)
+        ttk.Radiobutton(mode_ref_frame, text=TEXTS["mode_file"], variable=self.ref_mode, value="file").pack(side=tk.LEFT, padx=5)
+        ttk.Radiobutton(mode_ref_frame, text=TEXTS["mode_record"], variable=self.ref_mode, value="record").pack(side=tk.LEFT, padx=5)
 
         ttk.Label(ref_frame, text=TEXTS["ref_file_label"]).grid(row=1, column=0, sticky="w", pady=2)
         self.entry_ref = ttk.Entry(ref_frame, textvariable=self.tts_reference_path, width=50)
@@ -781,17 +749,13 @@ class App:
         self.synthesize_btn.grid(row=4, column=1, pady=10)
         ttk.Label(ref_frame, textvariable=self.tts_status).grid(row=4, column=2, sticky="w")
 
-        # Russian: Плеер
-        # English: Player
+        # Плеер
         player_frame = ttk.LabelFrame(right_frame, text=TEXTS["player_frame"], padding="5")
         player_frame.pack(fill=tk.BOTH, expand=True, pady=5)
-
         self.player_file_label = ttk.Label(player_frame, text=TEXTS["player_no_file"])
         self.player_file_label.pack(pady=5)
-
         btn_frame = ttk.Frame(player_frame)
         btn_frame.pack()
-
         self.play_btn = ttk.Button(btn_frame, text=TEXTS["play_button"], command=self.play_audio, state=tk.DISABLED)
         self.play_btn.pack(side=tk.LEFT, padx=5)
         self.stop_btn = ttk.Button(btn_frame, text=TEXTS["stop_button"], command=self.stop_audio, state=tk.DISABLED)
@@ -803,7 +767,6 @@ class App:
 
         self.recorder = None
         self.ref_recorder = None
-
         self.update_rec_mode()
         self.update_synth_mode()
         self.update_ref_mode()
@@ -849,21 +812,18 @@ class App:
             self.ref_record_btn.config(state=tk.NORMAL if not self.is_recording_ref else tk.DISABLED)
 
     def update_buttons_state(self):
-        # Russian: STT кнопка / STT button
         file_ok = self.stt_input_path.get() and os.path.exists(self.stt_input_path.get())
         if file_ok and not self.is_recording_stt and not self.is_recording_ref:
             self.recognize_btn.config(state=tk.NORMAL)
         else:
             self.recognize_btn.config(state=tk.DISABLED)
 
-        # Russian: TTS кнопка / TTS button
         ref_ok = self.tts_reference_path.get() and os.path.exists(self.tts_reference_path.get())
         text_ok = False
         if self.synth_mode.get() == "file":
             text_ok = self.tts_text_file.get() and os.path.exists(self.tts_text_file.get())
         else:
             text_ok = bool(self.tts_text_entry.get(1.0, tk.END).strip())
-
         if self.tts_engine and ref_ok and text_ok and not self.is_recording_stt and not self.is_recording_ref:
             self.synthesize_btn.config(state=tk.NORMAL)
         else:
@@ -899,7 +859,6 @@ class App:
 
     def set_ui_enabled(self, enable, except_rec_stt=False, except_rec_ref=False):
         state = tk.NORMAL if enable else tk.DISABLED
-
         self.stt_browse_btn.config(state=state)
         self.entry_stt_input.config(state=state)
         self.recognize_btn.config(state=state)
@@ -910,7 +869,6 @@ class App:
                         for widget in subchild.winfo_children():
                             if isinstance(widget, ttk.Radiobutton):
                                 widget.config(state=state)
-
         self.tts_browse_btn.config(state=state)
         self.entry_tts_file.config(state=state)
         self.tts_text_entry.config(state=tk.NORMAL if (enable and self.synth_mode.get()=="text") else tk.DISABLED)
@@ -919,12 +877,10 @@ class App:
         self.synthesize_btn.config(state=state)
         self.play_btn.config(state=state)
         self.stop_btn.config(state=state)
-
         if except_rec_stt:
             self.record_btn.config(state=tk.NORMAL)
         else:
             self.record_btn.config(state=tk.DISABLED if not enable else tk.NORMAL)
-
         if except_rec_ref:
             self.ref_record_btn.config(state=tk.NORMAL)
         else:
@@ -974,7 +930,6 @@ class App:
             self.is_recording_ref = True
             self.set_ui_enabled(False, except_rec_ref=True)
 
-    # -------------------- Model loading / Загрузка моделей --------------------
     def load_tts_model(self):
         try:
             self.tts_engine = VoiceCloningSystem()
@@ -1028,13 +983,11 @@ class App:
             messagebox.showerror(TEXTS["error_title"], TEXTS["package_install_fail"].format(e))
             return False
 
-    # -------------------- Recognition / Распознавание --------------------
     def recognize(self):
         input_path = self.stt_input_path.get()
         if not input_path or not os.path.exists(input_path):
             messagebox.showwarning(TEXTS["warning_title"], TEXTS["warning_no_audio_file"])
             return
-
         target_lang = self.stt_target_lang.get()
         from_lang = "Русский"
         need_translation = (target_lang != from_lang)
@@ -1045,11 +998,9 @@ class App:
                     self.root.after(0, lambda: self.show_loading_whisper(TEXTS["stt_status_loading_model"].format(self.stt_engine.model_size)))
                     self.stt_engine.load_model()
                     self.root.after(0, self.hide_loading_whisper)
-
                 self.stt_status.set(TEXTS["stt_status_recognizing"])
                 original_text = self.stt_engine.recognize(input_path)
                 self.root.after(0, lambda: self._set_recognized_text(original_text))
-
                 translated_text = original_text
                 if need_translation and original_text.strip():
                     if not self.translator.is_package_installed(from_lang, target_lang):
@@ -1097,7 +1048,6 @@ class App:
         self.translated_text.insert(1.0, text)
         self.translated_text.config(state=tk.DISABLED)
 
-    # -------------------- Synthesis / Синтез --------------------
     def synthesize(self):
         original_text = ""
         if self.synth_mode.get() == "file":
@@ -1116,24 +1066,20 @@ class App:
             if not original_text:
                 messagebox.showwarning(TEXTS["warning_title"], TEXTS["warning_enter_text"])
                 return
-
         ref_path = self.tts_reference_path.get()
         if not ref_path or not os.path.exists(ref_path):
             messagebox.showwarning(TEXTS["warning_title"], TEXTS["warning_no_reference"])
             return
-
         out_path = self.tts_output_path.get()
         if not out_path:
             timestamp = int(time.time())
             out_path = os.path.join(OUTPUT_DIR, TEXTS["default_output_wav"].format(timestamp))
             self.tts_output_path.set(out_path)
-
         target_lang_name = self.tts_target_lang.get()
         tts_lang_code = self.translator._get_language_code(target_lang_name, "tts")
         if not tts_lang_code:
             messagebox.showerror(TEXTS["error_title"], f"Язык {target_lang_name} не поддерживается для синтеза.")
             return
-
         need_translation = (target_lang_name != "Русский")
         final_text = original_text
 
@@ -1154,7 +1100,6 @@ class App:
                     translated = self.translator.translate(original_text, from_lang, target_lang_name)
                     final_text = translated
                     self.tts_status.set(TEXTS["tts_status_synthesizing"])
-
                 self.tts_status.set(TEXTS["tts_status_synthesizing"])
                 if pygame.mixer.music.get_busy():
                     pygame.mixer.music.stop()
@@ -1166,7 +1111,6 @@ class App:
                             TEXTS["error_title"], TEXTS["error_overwrite_file"].format(out_path)))
                         self.tts_status.set(TEXTS["tts_status_error"])
                         return
-
                 result = self.tts_engine.clone_voice(final_text, ref_path, out_path, language=tts_lang_code)
                 if result:
                     self.last_synthesized.set(result)
@@ -1182,7 +1126,6 @@ class App:
 
         threading.Thread(target=task, daemon=True).start()
 
-    # -------------------- Player / Плеер --------------------
     def play_audio(self):
         file = self.last_synthesized.get()
         if not file or not os.path.exists(file):
