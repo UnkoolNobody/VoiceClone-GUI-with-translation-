@@ -3,8 +3,14 @@ import sys
 import os
 from PyInstaller.utils.hooks import collect_submodules, collect_data_files, copy_metadata, collect_dynamic_libs
 
-# Увеличиваем лимит рекурсии для больших графов импорта
+# Увеличиваем лимит рекурсии (на случай больших графов импорта)
 sys.setrecursionlimit(100000)
+
+# Отключаем автоматическую компиляцию glib schema, вызывающую ошибку
+import PyInstaller.utils.hooks.gi as gi_hook
+def noop(*args, **kwargs):
+    return []
+gi_hook.compile_glib_schema_files = noop
 
 # Базовые настройки
 a = Analysis(
@@ -14,7 +20,7 @@ a = Analysis(
     datas=[
         # Копируем папку с локализациями (если существует)
         ('locales', 'locales'),
-        # Создаём пустые папки для пользовательских файлов (чтобы не было ошибок при старте)
+        # Создаём пустые папки для пользовательских файлов
         ('input', 'input'),
         ('output', 'output'),
         ('input/reference_samples', 'input/reference_samples'),
@@ -24,7 +30,7 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
-        # Уменьшаем размер, исключая огромные неиспользуемые библиотеки
+        # Исключаем ненужные большие модули, которые не используются в коде
         'matplotlib', 'IPython', 'jedi', 'parso', 'zmq',
         'pandas', 'tensorflow', 'tensorflow.*', 'keras', 'jax', 'flax',
         'notebook', 'jupyter_client', 'jupyter_core', 'ipykernel',
@@ -77,7 +83,6 @@ for pkg in ['tqdm', 'regex', 'tokenizers', 'safetensors', 'packaging',
         pass
 
 # ========== Бинарные библиотеки (DLL, SO, DYLIB) ==========
-# Добавляем динамические библиотеки для звука и графики
 a.binaries += collect_dynamic_libs('sounddevice')
 a.binaries += collect_dynamic_libs('pygame')
 a.binaries += collect_dynamic_libs('webrtcvad')
@@ -87,7 +92,7 @@ a.binaries += collect_dynamic_libs('torchaudio')
 # Явно добавляем PyTorch CUDA-библиотеки (если используются)
 if os.name == 'nt':
     # Windows
-    a.binaries += [('cudart64_*.dll', '.', 'BINARY')]  # шаблон
+    a.binaries += [('cudart64_*.dll', '.', 'BINARY')]
     a.binaries += [('cublas64_*.dll', '.', 'BINARY')]
     a.binaries += [('cudnn64_*.dll', '.', 'BINARY')]
 
