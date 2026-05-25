@@ -335,7 +335,6 @@ class Translator:
         """Принудительно перезагружает список установленных языков.
         Forcefully reloads the list of installed languages."""
         try:
-            # Очищаем внутренний кэш Argos Translate
             if hasattr(argostranslate.translate, '_load_installed_languages'):
                 argostranslate.translate._load_installed_languages.cache_clear()
             self.installed_packages.clear()
@@ -420,11 +419,11 @@ class Translator:
         if not from_code or not to_code:
             raise ValueError(f"Unknown language codes: {from_lang} -> {to_lang}")
 
-        # Прямой перевод
+        # Прямой перевод / Direct translate
         if self.is_package_installed(from_lang, to_lang):
             return argostranslate.translate.translate(text, from_code, to_code)
 
-        # Цепочка через английский
+        # Цепочка через английский / Chain through English
         en_code = "en"
         if self.is_package_installed(from_lang, "English") and self.is_package_installed("English", to_lang):
             intermediate = argostranslate.translate.translate(text, from_code, en_code)
@@ -433,7 +432,7 @@ class Translator:
         raise RuntimeError(f"No translation path found from {from_lang} to {to_lang}. "
                            f"Please install the direct package or ensure both {from_lang}->English and English->{to_lang} packages are installed.")
 
-# ========== ИМПОРТ Argos Translate ==========
+# ========== ИМПОРТ Argos Translate / IMPORT Argos Translate ==========
 import argostranslate.package
 import argostranslate.translate
 
@@ -620,7 +619,8 @@ class VoiceCloningSystem:
             return input_path
 
     def _embed_watermark(self, file_path: str):
-        """Встраивает неслышимый цифровой водяной знак (LSB) в WAV файл."""
+        """Встраивает неслышимый цифровой водяной знак (LSB) в WAV файл.
+        Embedding unhearable digital watermark (LSB) in WAV file."""
         try:
             with wave.open(file_path, 'rb') as wav:
                 params = wav.getparams()
@@ -1086,7 +1086,7 @@ class App:
         self.stop_btn = ttk.Button(btn_frame, text=TEXTS.get("stop_button", "Stop"), command=self.stop_audio, state=tk.DISABLED)
         self.stop_btn.pack(side=tk.LEFT, padx=5)
 
-    # ========== ВЫБОР ФАЙЛА (БЕЗ ЛИШНИХ ДИАЛОГОВ) ==========
+    # ========== ВЫБОР ФАЙЛА / FILE SELECTION ==========
     def select_file(self, var, filetypes):
         initial_dir = INPUT_DIR
         if not os.path.exists(initial_dir):
@@ -1117,7 +1117,7 @@ class App:
             var.set(filename)
             self.update_buttons_state()
 
-    # ========== ОБНОВЛЕНИЕ СОСТОЯНИЙ ==========
+    # ========== ОБНОВЛЕНИЕ СОСТОЯНИЙ / STATE UPDATES ==========
     def update_rec_mode(self):
         if self.is_recording_stt or self.is_recording_ref:
             return
@@ -1199,7 +1199,7 @@ class App:
             self.update_rec_mode()
             self.update_ref_mode()
 
-    # ========== ЗАПИСЬ ==========
+    # ========== ЗАПИСЬ / RECORDING ==========
     def toggle_record(self):
         if self.is_recording_stt:
             self.recorder.stop_recording(self.current_record_filename)
@@ -1240,7 +1240,7 @@ class App:
             self.set_ui_enabled(False, skip_rec_buttons=True)
             self.record_btn.config(state=tk.DISABLED)
 
-    # ========== ЗАГРУЗКА TTS ==========
+    # ========== ЗАГРУЗКА TTS / TTS LOADING ==========
     def load_tts_model_background(self):
         if self._loading_tts:
             return
@@ -1276,7 +1276,7 @@ class App:
         messagebox.showerror(TEXTS.get("error_title", "Critical error"), message)
         self.root.quit()
 
-    # ========== УСТАНОВКА ПАКЕТА ПЕРЕВОДА ==========
+    # ========== УСТАНОВКА ПАКЕТА ПЕРЕВОДА / INSTALL TRANSLATION PACKAGE ==========
     def _install_translation_package(self, from_lang, to_lang):
         from_code = self.translator.get_language_code(from_lang, "argos")
         to_code = self.translator.get_language_code(to_lang, "argos")
@@ -1298,7 +1298,7 @@ class App:
                 return False
             return self._install_single_package(direct_package, from_lang, to_lang)
 
-        # Цепочка через английский
+        # ---------- Цепочка через английский / Chain via English ----------
         en_code = "en"
         en_pkg_from = next((pkg for pkg in available if pkg.from_code == from_code and pkg.to_code == en_code), None)
         en_pkg_to   = next((pkg for pkg in available if pkg.from_code == en_code and pkg.to_code == to_code), None)
@@ -1354,7 +1354,7 @@ class App:
                                  TEXTS.get("package_install_fail", "Failed to install package: {}").format(e))
             return False
 
-    # ========== СКАЧИВАНИЕ ВСЕХ МОДЕЛЕЙ WHISPER ==========
+    # ========== СКАЧИВАНИЕ ВСЕХ МОДЕЛЕЙ WHISPER / DOWNLOADING ALL WHISPER MODELS ==========
     def download_all_whisper_models(self):
         def task():
             models = ["tiny", "base", "small", "medium", "large"]
@@ -1374,7 +1374,7 @@ class App:
                                                            TEXTS.get("downloading_whisper_complete", "All Whisper models have been downloaded.")))
         threading.Thread(target=task, daemon=True).start()
 
-    # ========== СКАЧИВАНИЕ ВСЕХ ПАКЕТОВ ARGOS (ТОЛЬКО ПОДДЕРЖИВАЕМЫЕ ЯЗЫКИ) ==========
+    # ========== СКАЧИВАНИЕ ВСЕХ ПАКЕТОВ ARGOS (ТОЛЬКО ПОДДЕРЖИВАЕМЫЕ ЯЗЫКИ) / DOWNLOADING ALL ARGOS PACKAGES (ONLY SUPPORTED LANGUAGES) ==========
     def download_all_argos_packages(self):
         def task():
             try:
@@ -1419,7 +1419,7 @@ class App:
                 self.root.after(0, lambda: messagebox.showerror(TEXTS.get("error_title", "Error"), str(e)))
         threading.Thread(target=task, daemon=True).start()
 
-    # ========== РАСПОЗНАВАНИЕ ==========
+    # ========== РАСПОЗНАВАНИЕ / RECOGNITION ==========
     def recognize(self):
         input_path = self.stt_input_path.get()
         if not input_path or not os.path.exists(input_path):
@@ -1482,7 +1482,7 @@ class App:
 
         threading.Thread(target=task, daemon=True).start()
 
-    # ========== СИНТЕЗ ==========
+    # ========== СИНТЕЗ / SYNTHESIS ==========
     def synthesize(self):
         if self.synth_mode.get() == "file":
             file_path = self.tts_text_file.get()
