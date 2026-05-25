@@ -1,17 +1,20 @@
 # ============================================================
-# VoiceClone-GUI - Портативная версия (main.py)
+# VoiceClone-GUI - speech recognition, synthesis and voice cloning
+# VoiceClone-GUI - распознавание речи, синтез и клонирование голоса
 # ============================================================
 # Russian / Русский:
 # Программа для распознавания речи (Whisper) и синтеза речи
 # с клонированием голоса (XTTS v2) + офлайн-перевод (Argos Translate).
 # Все модели и кэш хранятся в папке cache рядом с программой.
 # FFmpeg должен лежать в папке ffmpeg рядом с программой.
+# Добавлен неслышимый цифровой водяной знак (LSB) в выходные аудиофайлы.
 #
 # English / Английский:
 # Speech recognition (Whisper) and speech synthesis with voice
 # cloning (XTTS v2) + offline translation (Argos Translate).
 # All models and cache are stored in the "cache" folder next to the program.
 # FFmpeg must be located in the "ffmpeg" folder next to the program.
+# Inaudible digital watermark (LSB) is embedded into output audio files.
 # ============================================================
 
 import sys
@@ -118,7 +121,7 @@ import argostranslate.translate
 # Forcibly set paths inside the library
 argostranslate.package.package_data_dir = ARGOS_CACHE_DIR
 argostranslate.package.package_dirs = [ARGOS_CACHE_DIR]
-argostranslate.package.downloads_dir = ARGOS_CACHE_DIR   # временные файлы тоже туда
+argostranslate.package.downloads_dir = ARGOS_CACHE_DIR   # временные файлы тоже туда / temporary files also there
 
 print(f"Argos Translate will use: {ARGOS_CACHE_DIR}")
 
@@ -315,7 +318,9 @@ class Localization:
             "installing_package": "Installing package...",
             "ffmpeg_help": "\n" + "="*60 + "\nFFMPEG SOLUTION:\n" + "="*60 + "\n1. Install FFmpeg (full-shared) into 'ffmpeg' folder next to the program.\n2. Ensure ffmpeg.exe and all DLLs are present.\n" + "="*60 + "\n",
             "select_file_title": "Select audio file",
-            "save_file_title": "Save file"
+            "save_file_title": "Save file",
+            "legal_warning_title": "Legal notice",
+            "legal_warning_message": "This software is intended for legitimate use only (e.g. voice dubbing for accessibility, creative projects).\nVoice cloning without the consent of the voice owner or for fraudulent purposes is illegal.\nBy using this software you assume full legal responsibility for any misuse.\n\nA digital watermark is embedded into every generated audio file for forensic identification."
         }
         with open(os.path.join(locales_dir, "en.json"), 'w', encoding='utf-8') as f:
             json.dump(default_en, f, ensure_ascii=False, indent=2)
@@ -335,7 +340,8 @@ def load_settings():
         "translate_enabled": True,
         "rec_mode": "file",
         "synth_mode": "text",
-        "ref_mode": "file"
+        "ref_mode": "file",
+        "warning_acknowledged": False
     }
     if not os.path.exists(SETTINGS_FILE):
         with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
@@ -358,7 +364,7 @@ def save_settings(settings):
     except:
         pass
 
-# ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
+# ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ / HELPER FUNCTIONS ==========
 def check_ffmpeg():
     try:
         subprocess.run(['ffmpeg', '-version'], capture_output=True, check=True)
@@ -366,7 +372,7 @@ def check_ffmpeg():
         print(TEXTS.get("ffmpeg_help", "FFmpeg not found"))
         raise RuntimeError("FFmpeg not found")
 
-# ========== ПЕРЕВОДЧИК ==========
+# ========== ПЕРЕВОДЧИК / TRANSLATOR ==========
 class Translator:
     SUPPORTED_LANGUAGES = {
         "Russian":    {"whisper": "ru", "tts": "ru", "argos": "ru"},
@@ -405,12 +411,15 @@ class Translator:
         Forcefully reloads the list of installed languages."""
         try:
             # Очищаем внутренний кэш Argos Translate
+            # Clear the internal cache of Argos Translate
             if hasattr(argostranslate.translate, '_load_installed_languages'):
                 argostranslate.translate._load_installed_languages.cache_clear()
             # Сбрасываем наш кэш
+            # Reset our cache
             self.installed_packages.clear()
             self._package_availability_cache.clear()
             # Вызываем принудительное обновление
+            # Force an update
             argostranslate.translate.get_installed_languages()
         except Exception as e:
             print(f"Warning: failed to refresh languages: {e}")
@@ -509,7 +518,7 @@ class Translator:
         raise RuntimeError(f"No translation path found from {from_lang} to {to_lang}. "
                            f"Please install the direct package or ensure both {from_lang}->English and English->{to_lang} packages are installed.")
 
-# ========== РАСПОЗНАВАНИЕ РЕЧИ ==========
+# ========== РАСПОЗНАВАНИЕ РЕЧИ / SPEECH RECOGNITION ==========
 class SpeechRecognizer:
     def __init__(self, model_size="small"):
         self.model_size = model_size
@@ -610,7 +619,7 @@ class SpeechRecognizer:
                 os.remove(temp_path)
         return text
 
-# ========== СИНТЕЗ РЕЧИ ==========
+# ========== СИНТЕЗ РЕЧИ / TTS SYNTHESIS ==========
 class VoiceCloningSystem:
     def __init__(self, model_name: str = "tts_models/multilingual/multi-dataset/xtts_v2", progress_callback=None):
         check_ffmpeg()
@@ -694,6 +703,43 @@ class VoiceCloningSystem:
             print(f"Audio preprocessing failed: {e}")
             return input_path
 
+    def _embed_watermark(self, file_path: str):
+        """Встраивает неслышимый цифровой водяной знак (LSB) в WAV файл.
+        Embeds an inaudible digital watermark (LSB) into the WAV file."""
+        try:
+            # Открываем файл для чтения
+            # Open the file for reading
+            with wave.open(file_path, 'rb') as wav:
+                params = wav.getparams()
+                frames = wav.readframes(params.nframes)
+            # Преобразуем в numpy массив int16
+            # Convert to numpy int16 array
+            audio = np.frombuffer(frames, dtype=np.int16).copy()
+            if len(audio) == 0:
+                return
+            # Сигнатура водяного знака "VCLONE" (6 байт = 48 бит)
+            # Watermark signature "VCLONE" (6 bytes = 48 bits)
+            signature = "VCLONE"
+            bits = []
+            for ch in signature:
+                # младший бит первым (LSB first)
+                # least significant bit first (LSB first)
+                for i in range(8):
+                    bits.append((ord(ch) >> i) & 1)
+            # Встраиваем в первые min(48, len(audio)) отсчетов
+            # Embed into the first min(48, len(audio)) samples
+            n_bits = min(len(bits), len(audio))
+            for i in range(n_bits):
+                audio[i] = (audio[i] & 0xFE) | bits[i]   # обнуляем младший бит и ставим нужный / zero the LSB and set the needed bit
+            # Записываем обратно
+            # Write back
+            with wave.open(file_path, 'wb') as wav:
+                wav.setparams(params)
+                wav.writeframes(audio.tobytes())
+            print("Watermark embedded successfully.")
+        except Exception as e:
+            print(f"Failed to embed watermark: {e}")
+
     def clone_voice(self, text: str, reference_audio_path: str, output_path: str = "output.wav", language: str = "ru") -> str:
         if not os.path.exists(reference_audio_path):
             raise FileNotFoundError(f"File {reference_audio_path} not found")
@@ -709,11 +755,14 @@ class VoiceCloningSystem:
             print(f"Synthesis error: {e}")
             raise
         if os.path.exists(output_path):
+            # Внедряем водяной знак
+            # Embed watermark
+            self._embed_watermark(output_path)
             return output_path
         else:
             raise RuntimeError("Output file not created")
 
-# ========== ЗАПИСЬ ==========
+# ========== ЗАПИСЬ / RECORDER ==========
 class Recorder:
     def __init__(self, entry_widget, var, status_entry, sample_rate=16000, channels=1):
         self.entry = entry_widget
@@ -782,7 +831,7 @@ class Recorder:
             self.status_entry.insert(0, TEXTS.get("record_status_no_data", "No data"))
             self.status_entry.config(state='readonly')
 
-# ========== ПАНЕЛЬ ПРОГРЕССА ==========
+# ========== ПАНЕЛЬ ПРОГРЕССА / PROGRESS PANEL ==========
 class ProgressOverlay:
     def __init__(self, parent_grid, row):
         self.parent = parent_grid
@@ -828,18 +877,28 @@ class ProgressOverlay:
             self.progress_var = None
             self.label = None
 
-# ========== ОСНОВНОЙ GUI ==========
+# ========== ОСНОВНОЙ GUI / MAIN GUI ==========
 class App:
     def __init__(self, root):
         global TEXTS
         self.root = root
         self.settings = load_settings()
+        # Показываем предупреждение о законности использования (один раз)
+        # Show legal warning once
+        if not self.settings.get("warning_acknowledged", False):
+            messagebox.showwarning(
+                TEXTS.get("legal_warning_title", "Legal notice"),
+                TEXTS.get("legal_warning_message", "This software is intended for legitimate use only...")
+            )
+            self.settings["warning_acknowledged"] = True
+            save_settings(self.settings)
+
         self.translator = Translator()
         self.stt_engine = SpeechRecognizer(model_size=self.settings.get("whisper_model", "small"))
         self.tts_engine = None
         self._loading_tts = False
 
-        # Переменные
+        # Переменные / Variables
         self.stt_input_path = tk.StringVar()
         self.stt_output_path = tk.StringVar()
         self.tts_text_file = tk.StringVar()
@@ -866,7 +925,7 @@ class App:
         self.recorder = None
         self.ref_recorder = None
 
-        # Настройка сетки корневого окна
+        # Настройка сетки корневого окна / Root grid configuration
         self.root.grid_rowconfigure(0, weight=1)
         self.root.grid_rowconfigure(1, weight=0)
         self.root.grid_columnconfigure(0, weight=1)
@@ -957,7 +1016,7 @@ class App:
         paned.grid_columnconfigure(1, weight=1)
         paned.grid_rowconfigure(0, weight=1)
 
-        # ================= ЛЕВАЯ КОЛОНКА =================
+        # ================= ЛЕВАЯ КОЛОНКА / LEFT COLUMN =================
         left_frame = ttk.LabelFrame(paned, text=TEXTS.get("left_panel_title", "Speech Recognition"), padding="10")
         left_frame.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
         left_frame.grid_columnconfigure(1, weight=1)
@@ -1042,7 +1101,7 @@ class App:
         scroll_trans.pack(side=tk.RIGHT, fill=tk.Y)
         self.translated_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        # ================= ПРАВАЯ КОЛОНКА =================
+        # ================= ПРАВАЯ КОЛОНКА / RIGHT COLUMN =================
         right_frame = ttk.Frame(paned)
         right_frame.grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
         right_frame.grid_columnconfigure(0, weight=1)
@@ -1129,6 +1188,7 @@ class App:
         self.stop_btn.pack(side=tk.LEFT, padx=5)
 
     # ========== ВЫБОР ФАЙЛА (БЕЗ ЛИШНИХ ДИАЛОГОВ) ==========
+    # ========== FILE SELECTION (WITHOUT EXTRA DIALOGS) ==========
     def select_file(self, var, filetypes):
         initial_dir = INPUT_DIR
         if not os.path.exists(initial_dir):
@@ -1159,7 +1219,7 @@ class App:
             var.set(filename)
             self.update_buttons_state()
 
-    # ========== ОБНОВЛЕНИЕ СОСТОЯНИЙ ==========
+    # ========== ОБНОВЛЕНИЕ СОСТОЯНИЙ / STATE UPDATES ==========
     def update_rec_mode(self):
         if self.is_recording_stt or self.is_recording_ref:
             return
@@ -1241,7 +1301,7 @@ class App:
             self.update_rec_mode()
             self.update_ref_mode()
 
-    # ========== ЗАПИСЬ ==========
+    # ========== ЗАПИСЬ / RECORDING ==========
     def toggle_record(self):
         if self.is_recording_stt:
             self.recorder.stop_recording(self.current_record_filename)
@@ -1282,7 +1342,7 @@ class App:
             self.set_ui_enabled(False, skip_rec_buttons=True)
             self.record_btn.config(state=tk.DISABLED)
 
-    # ========== ЗАГРУЗКА TTS ==========
+    # ========== ЗАГРУЗКА TTS / TTS LOADING ==========
     def load_tts_model_background(self):
         if self._loading_tts:
             return
@@ -1318,7 +1378,7 @@ class App:
         messagebox.showerror(TEXTS.get("error_title", "Critical error"), message)
         self.root.quit()
 
-    # ========== УСТАНОВКА ПАКЕТА ПЕРЕВОДА ==========
+    # ========== УСТАНОВКА ПАКЕТА ПЕРЕВОДА / INSTALL TRANSLATION PACKAGE ==========
     def _install_translation_package(self, from_lang, to_lang):
         from_code = self.translator.get_language_code(from_lang, "argos")
         to_code = self.translator.get_language_code(to_lang, "argos")
@@ -1326,6 +1386,7 @@ class App:
             return False
 
         # Если перевод уже доступен (прямой или через английский)
+        # If translation is already available (direct or through English)
         if self.translator.is_translation_available(from_lang, to_lang):
             return True
 
@@ -1341,7 +1402,7 @@ class App:
                 return False
             return self._install_single_package(direct_package, from_lang, to_lang)
 
-        # ---------- Цепочка через английский ----------
+        # ---------- Цепочка через английский / Chain via English ----------
         en_code = "en"
         en_pkg_from = next((pkg for pkg in available if pkg.from_code == from_code and pkg.to_code == en_code), None)
         en_pkg_to   = next((pkg for pkg in available if pkg.from_code == en_code and pkg.to_code == to_code), None)
@@ -1354,16 +1415,20 @@ class App:
             return False
 
         # Проверяем, какие пакеты уже установлены
+        # Check which packages are already installed
         need_from = not self.translator.is_package_installed(from_lang, "English")
         need_to   = not self.translator.is_package_installed("English", to_lang)
 
         if not need_from and not need_to:
             # Пакеты уже есть, но по какой-то причине is_translation_available вернул False
+            # Packages already exist, but for some reason is_translation_available returned False
             # Обновляем кэш и пробуем ещё раз
+            # Update cache and try again
             self.translator._refresh_installed_languages()
             return self.translator.is_translation_available(from_lang, to_lang)
 
         # Собираем сообщение для пользователя
+        # Collecting message for user
         msg = TEXTS.get("chain_package_question", "Direct package {0}->{1} not found.\nDo you want to install the chain via English?\nThis may affect translation quality.").format(from_lang, to_lang)
         if need_from:
             msg += f"\n\nWill install {from_lang} → English."
@@ -1374,6 +1439,7 @@ class App:
             return False
 
         # Устанавливаем только недостающие
+        # Install only the missing ones
         if need_from:
             if not self._install_single_package(en_pkg_from, from_lang, "English"):
                 return False
@@ -1402,7 +1468,7 @@ class App:
                                  TEXTS.get("package_install_fail", "Failed to install package: {}").format(e))
             return False
 
-    # ========== СКАЧИВАНИЕ ВСЕХ МОДЕЛЕЙ WHISPER ==========
+    # ========== СКАЧИВАНИЕ ВСЕХ МОДЕЛЕЙ WHISPER / DOWNLOADING ALL WHISPER MODELS ==========
     def download_all_whisper_models(self):
         def task():
             models = ["tiny", "base", "small", "medium", "large"]
@@ -1422,35 +1488,62 @@ class App:
                                                            TEXTS.get("downloading_whisper_complete", "All Whisper models have been downloaded.")))
         threading.Thread(target=task, daemon=True).start()
 
-    # ========== СКАЧИВАНИЕ ВСЕХ ПАКЕТОВ ARGOS ==========
+    # ========== СКАЧИВАНИЕ ВСЕХ ПАКЕТОВ ARGOS (ТОЛЬКО ПОДДЕРЖИВАЕМЫЕ ЯЗЫКИ) / DOWNLOADING ALL ARGOS PACKAGES (ONLY SUPPORTED LANGUAGES) ==========
     def download_all_argos_packages(self):
+        """Скачивает все языковые пакеты Argos Translate для языков, поддерживаемых программой.
+        Downloads all Argos Translate language packages for languages supported by the program."""
         def task():
             try:
-                available = argostranslate.package.get_available_packages()
-                total = len(available)
+                # Получаем список всех доступных пакетов
+                # Get list of all available packages
+                all_packages = argostranslate.package.get_available_packages()
+                # Формируем набор кодов языков, поддерживаемых программой
+                # Build a set of language codes supported by the program
+                supported_codes = set()
+                for lang in self.translator.SUPPORTED_LANGUAGES.keys():
+                    code = self.translator.get_language_code(lang, "argos")
+                    if code:
+                        supported_codes.add(code)
+                # Отбираем пакеты, у которых оба языка входят в поддерживаемые
+                # Filter packages where both from and to languages are supported
+                packages = [pkg for pkg in all_packages 
+                        if pkg.from_code in supported_codes and pkg.to_code in supported_codes]
+                total = len(packages)
                 if total == 0:
-                    self.root.after(0, lambda: messagebox.showinfo(TEXTS.get("info_title", "Information"),
-                                                                   TEXTS.get("no_packages_available", "No packages available.")))
+                    self.root.after(0, lambda: messagebox.showinfo(
+                        TEXTS.get("info_title", "Information"),
+                        TEXTS.get("no_packages_available", "No packages available for supported languages.")
+                    ))
                     return
-                self.progress_overlay.show(TEXTS.get("downloading_argos", "Downloading all language packages..."), mode='determinate')
-                for i, pkg in enumerate(available):
+                self.progress_overlay.show(
+                    TEXTS.get("downloading_argos", "Downloading language packages for supported languages..."),
+                    mode='determinate'
+                )
+                for i, pkg in enumerate(packages):
+                    # Пропускаем уже установленные пакеты
+                    # Skip already installed packages
                     if pkg in argostranslate.package.get_installed_packages():
                         continue
                     percent = int((i / total) * 100)
-                    self.progress_overlay.update(percent, TEXTS.get("downloading_argos_progress", "Downloading {}→{} ({}/{})")
-                                                 .format(pkg.from_code, pkg.to_code, i+1, total))
+                    self.progress_overlay.update(
+                        percent,
+                        TEXTS.get("downloading_argos_progress", "Downloading {}→{} ({}/{})")
+                        .format(pkg.from_code, pkg.to_code, i+1, total)
+                    )
                     download_path = pkg.download()
                     argostranslate.package.install_from_path(download_path)
                 self.progress_overlay.hide()
-                self.root.after(0, lambda: messagebox.showinfo(TEXTS.get("info_title", "Information"),
-                                                               TEXTS.get("downloading_argos_complete", "All available language packages have been downloaded.")))
+                self.root.after(0, lambda: messagebox.showinfo(
+                    TEXTS.get("info_title", "Information"),
+                    TEXTS.get("downloading_argos_complete", "All available language packages for supported languages have been downloaded.")
+                ))
                 self.translator._refresh_installed_languages()
             except Exception as e:
                 self.progress_overlay.hide()
                 self.root.after(0, lambda: messagebox.showerror(TEXTS.get("error_title", "Error"), str(e)))
         threading.Thread(target=task, daemon=True).start()
 
-    # ========== РАСПОЗНАВАНИЕ ==========
+    # ========== РАСПОЗНАВАНИЕ / RECOGNITION ==========
     def recognize(self):
         input_path = self.stt_input_path.get()
         if not input_path or not os.path.exists(input_path):
@@ -1479,6 +1572,7 @@ class App:
 
                 if do_translate and original_text.strip():
                     # Проверяем доступность перевода (прямой или через английский)
+                    # Checking the availability of translation (direct or through English)
                     if not self.translator.is_translation_available(source_lang, target_lang):
                         self.root.after(0, lambda: self.stt_status.set(TEXTS.get("stt_status_checking_package", "Checking translation package...")))
                         installed = self._install_translation_package(source_lang, target_lang)
@@ -1491,6 +1585,7 @@ class App:
                                     f.write(original_text)
                             return
                         # После установки обновляем кэш
+                        # Updating cache after installation
                         self.translator._refresh_installed_languages()
 
                     self.stt_status.set(TEXTS.get("stt_status_translating", "Translating..."))
@@ -1515,7 +1610,7 @@ class App:
 
         threading.Thread(target=task, daemon=True).start()
 
-    # ========== СИНТЕЗ ==========
+    # ========== СИНТЕЗ / SYNTHESIS ==========
     def synthesize(self):
         if self.synth_mode.get() == "file":
             file_path = self.tts_text_file.get()
@@ -1620,7 +1715,7 @@ class App:
         pygame.mixer.music.stop()
 
 # ============================================================
-# ЗАПУСК
+# ЗАПУСК / LAUNCH
 # ============================================================
 if __name__ == "__main__":
     root = tk.Tk()
