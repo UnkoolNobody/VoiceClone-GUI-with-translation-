@@ -5,16 +5,14 @@
 # Russian / Русский:
 # Программа для распознавания речи (Whisper) и синтеза речи
 # с клонированием голоса (XTTS v2) + офлайн-перевод (Argos Translate).
-# Все модели и кэш хранятся в папке cache рядом с программой.
-# FFmpeg должен лежать в папке ffmpeg рядом с программой.
-# Добавлен неслышимый цифровой водяной знак (LSB) в выходные аудиофайлы.
+# Все модели и кэш хранятся в стандартных системных папках пользователя.
+# FFmpeg должен лежать в папке ffmpeg рядом с программой (опционально).
 #
 # English / Английский:
 # Speech recognition (Whisper) and speech synthesis with voice
 # cloning (XTTS v2) + offline translation (Argos Translate).
-# All models and cache are stored in the "cache" folder next to the program.
-# FFmpeg must be located in the "ffmpeg" folder next to the program.
-# Inaudible digital watermark (LSB) is embedded into output audio files.
+# All models and cache are stored in standard system user folders.
+# FFmpeg can be placed in the "ffmpeg" folder next to the program (optional).
 # ============================================================
 
 import sys
@@ -49,88 +47,14 @@ if not hasattr(transformers.pytorch_utils, 'isin_mps_friendly'):
 # ========== ИМПОРТ TTS / TTS IMPORT ==========
 from TTS.api import TTS
 
-# ========== НАСТРОЙКИ ПОРТАТИВНОСТИ / PORTABLE SETTINGS ==========
+# ========== НАСТРОЙКИ ПОРТАТИВНОСТИ (ТОЛЬКО ПАПКИ ВВОДА/ВЫВОДА) ==========
+# ========== PORTABLE SETTINGS (ONLY INPUT/OUTPUT FOLDERS) ==========
 if getattr(sys, 'frozen', False):
     BASE_DIR = os.path.dirname(sys.executable)
 else:
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-CACHE_DIR = os.path.join(BASE_DIR, "cache")
-os.makedirs(CACHE_DIR, exist_ok=True)
-
-# ========== ПРИНУДИТЕЛЬНОЕ ПЕРЕНАПРАВЛЕНИЕ ARGOS TRANSLATE ==========
-# / FORCED REDIRECTION OF ARGOS TRANSLATE ==========
-# Argos Translate по умолчанию складывает всё в ~/.local/share/argos-translate
-# и ~/.cache/argos-translate. Мы принудительно перенаправляем в папку программы.
-# Argos Translate by default stores data in ~/.local/share/argos-translate
-# and ~/.cache/argos-translate. We forcibly redirect to the program's folder.
-
-ARGOS_CACHE_DIR = os.path.join(CACHE_DIR, "argos-translate")
-os.makedirs(ARGOS_CACHE_DIR, exist_ok=True)
-
-# Патчим appdirs и platformdirs, чтобы они возвращали наши пути
-# Patch appdirs and platformdirs to return our paths
-try:
-    import appdirs
-    _orig_user_cache = appdirs.user_cache_dir
-    _orig_user_data = appdirs.user_data_dir
-    def _patched_user_cache(appname=None, *args, **kwargs):
-        if appname == "argos-translate" or (appname and "argos" in appname.lower()):
-            return ARGOS_CACHE_DIR
-        return _orig_user_cache(appname, *args, **kwargs)
-    def _patched_user_data(appname=None, *args, **kwargs):
-        if appname == "argos-translate" or (appname and "argos" in appname.lower()):
-            return ARGOS_CACHE_DIR
-        return _orig_user_data(appname, *args, **kwargs)
-    appdirs.user_cache_dir = _patched_user_cache
-    appdirs.user_data_dir = _patched_user_data
-    print("✓ Patched appdirs for Argos")
-except ImportError:
-    pass
-
-try:
-    import platformdirs
-    _orig_plat_cache = platformdirs.user_cache_dir
-    _orig_plat_data = platformdirs.user_data_dir
-    def _patched_plat_cache(appname=None, *args, **kwargs):
-        if appname == "argos-translate" or (appname and "argos" in appname.lower()):
-            return ARGOS_CACHE_DIR
-        return _orig_plat_cache(appname, *args, **kwargs)
-    def _patched_plat_data(appname=None, *args, **kwargs):
-        if appname == "argos-translate" or (appname and "argos" in appname.lower()):
-            return ARGOS_CACHE_DIR
-        return _orig_plat_data(appname, *args, **kwargs)
-    platformdirs.user_cache_dir = _patched_plat_cache
-    platformdirs.user_data_dir = _patched_plat_data
-    print("✓ Patched platformdirs for Argos")
-except ImportError:
-    pass
-
-# Дополнительно устанавливаем переменные окружения для Argos
-# Also set environment variables for Argos
-os.environ['ARGOS_TRANSLATE_PACKAGE_DIRS'] = ARGOS_CACHE_DIR
-os.environ['XDG_CACHE_HOME'] = CACHE_DIR
-os.environ['XDG_DATA_HOME'] = CACHE_DIR
-
-# Импортируем Argos Translate
-# Import Argos Translate
-import argostranslate.package
-import argostranslate.translate
-
-# Принудительно устанавливаем пути внутри библиотеки
-# Forcibly set paths inside the library
-argostranslate.package.package_data_dir = ARGOS_CACHE_DIR
-argostranslate.package.package_dirs = [ARGOS_CACHE_DIR]
-argostranslate.package.downloads_dir = ARGOS_CACHE_DIR   # временные файлы тоже туда / temporary files also there
-
-print(f"Argos Translate will use: {ARGOS_CACHE_DIR}")
-
-# ========== ОСТАЛЬНЫЕ КЭШИ / OTHER CACHES ==========
-os.environ['HF_HOME'] = os.path.join(CACHE_DIR, "hf_cache")
-os.environ['TRANSFORMERS_CACHE'] = os.path.join(CACHE_DIR, "hf_cache")
-os.environ['HUGGINGFACE_HUB_CACHE'] = os.path.join(CACHE_DIR, "hf_cache")
-os.environ['TTS_HOME'] = os.path.join(CACHE_DIR, "tts_cache")
-
+# Папки для пользовательских файлов (остаются рядом с программой)
 INPUT_DIR = os.path.join(BASE_DIR, "input")
 OUTPUT_DIR = os.path.join(BASE_DIR, "output")
 REF_SAMPLES_DIR = os.path.join(INPUT_DIR, "reference_samples")
@@ -138,6 +62,11 @@ os.makedirs(INPUT_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 os.makedirs(REF_SAMPLES_DIR, exist_ok=True)
 
+# Папка с файлами локализации (рядом с программой)
+LOCALES_DIR = os.path.join(BASE_DIR, "locales")
+os.makedirs(LOCALES_DIR, exist_ok=True)
+
+# Поиск FFmpeg в папке ffmpeg рядом с программой (опционально)
 FFMPEG_DIR = os.path.join(BASE_DIR, "ffmpeg")
 if os.path.exists(FFMPEG_DIR):
     os.environ["PATH"] = FFMPEG_DIR + os.pathsep + os.environ.get("PATH", "")
@@ -167,10 +96,6 @@ if not hasattr(transformers.pytorch_utils, 'isin_mps_friendly'):
     transformers.pytorch_utils.isin_mps_friendly = _isin_mps_friendly
     print("✓ Patch for transformers.isin_mps_friendly applied")
 
-os.environ['COQUI_TOS_AGREED'] = '1'
-warnings.filterwarnings('ignore')
-pygame.mixer.init()
-
 # ========== ЛОКАЛИЗАЦИЯ / LOCALIZATION ==========
 class Localization:
     _instance = None
@@ -183,14 +108,14 @@ class Localization:
         return cls._instance
 
     def get_available_languages(self):
-        locales_dir = os.path.join(BASE_DIR, "locales")
+        locales_dir = LOCALES_DIR
         if not os.path.isdir(locales_dir):
             return ['en']
         files = [f[:-5] for f in os.listdir(locales_dir) if f.endswith('.json')]
         return files if files else ['en']
 
     def load_language(self, lang_code=None):
-        locales_dir = os.path.join(BASE_DIR, "locales")
+        locales_dir = LOCALES_DIR
         os.makedirs(locales_dir, exist_ok=True)
 
         if lang_code is None:
@@ -411,15 +336,10 @@ class Translator:
         Forcefully reloads the list of installed languages."""
         try:
             # Очищаем внутренний кэш Argos Translate
-            # Clear the internal cache of Argos Translate
             if hasattr(argostranslate.translate, '_load_installed_languages'):
                 argostranslate.translate._load_installed_languages.cache_clear()
-            # Сбрасываем наш кэш
-            # Reset our cache
             self.installed_packages.clear()
             self._package_availability_cache.clear()
-            # Вызываем принудительное обновление
-            # Force an update
             argostranslate.translate.get_installed_languages()
         except Exception as e:
             print(f"Warning: failed to refresh languages: {e}")
@@ -482,18 +402,15 @@ class Translator:
         return True
 
     def is_translation_available(self, from_lang, to_lang):
-        """Проверяет, доступен ли перевод (прямой или через английский).
-        Checks whether translation is available (direct or through English)"""
+        """Проверяет, доступен ли перевод (прямой или через английский)."""
         if self.is_package_installed(from_lang, to_lang):
             return True
-        # Проверяем цепочку через английский / Checking chain through English
         if self.is_package_installed(from_lang, "English") and self.is_package_installed("English", to_lang):
             return True
         return False
 
     def translate(self, text, from_lang, to_lang):
-        """Переводит текст, при необходимости используя цепочку через английский.
-        Translates text, using English as a bridge if direct package is missing."""
+        """Переводит текст, при необходимости используя цепочку через английский."""
         if not text or not text.strip():
             return text
         if from_lang == to_lang:
@@ -503,20 +420,22 @@ class Translator:
         if not from_code or not to_code:
             raise ValueError(f"Unknown language codes: {from_lang} -> {to_lang}")
 
-        # Прямой перевод / Direct translation
+        # Прямой перевод
         if self.is_package_installed(from_lang, to_lang):
             return argostranslate.translate.translate(text, from_code, to_code)
 
-        # Цепочка через английский / Chain via English
+        # Цепочка через английский
         en_code = "en"
         if self.is_package_installed(from_lang, "English") and self.is_package_installed("English", to_lang):
             intermediate = argostranslate.translate.translate(text, from_code, en_code)
             return argostranslate.translate.translate(intermediate, en_code, to_code)
 
-        # Прямой пакет отсутствует, цепочка не настроена → сообщаем об ошибке
-        # No direct package, chain not available → raise error
         raise RuntimeError(f"No translation path found from {from_lang} to {to_lang}. "
                            f"Please install the direct package or ensure both {from_lang}->English and English->{to_lang} packages are installed.")
+
+# ========== ИМПОРТ Argos Translate ==========
+import argostranslate.package
+import argostranslate.translate
 
 # ========== РАСПОЗНАВАНИЕ РЕЧИ / SPEECH RECOGNITION ==========
 class SpeechRecognizer:
@@ -530,15 +449,12 @@ class SpeechRecognizer:
     def load_model(self, progress_callback=None):
         if self.model is not None:
             return
-        whisper_cache = os.path.join(CACHE_DIR, "whisper_cache")
-        os.makedirs(whisper_cache, exist_ok=True)
         print(f"Loading Whisper model ({self.model_size})...")
         if progress_callback:
             progress_callback(10, f"Loading {self.model_size} model...")
         self.model = whisper.load_model(
             self.model_size,
-            device=self.device,
-            download_root=whisper_cache
+            device=self.device
         )
         if progress_callback:
             progress_callback(100, "Model loaded")
@@ -704,35 +620,22 @@ class VoiceCloningSystem:
             return input_path
 
     def _embed_watermark(self, file_path: str):
-        """Встраивает неслышимый цифровой водяной знак (LSB) в WAV файл.
-        Embeds an inaudible digital watermark (LSB) into the WAV file."""
+        """Встраивает неслышимый цифровой водяной знак (LSB) в WAV файл."""
         try:
-            # Открываем файл для чтения
-            # Open the file for reading
             with wave.open(file_path, 'rb') as wav:
                 params = wav.getparams()
                 frames = wav.readframes(params.nframes)
-            # Преобразуем в numpy массив int16
-            # Convert to numpy int16 array
             audio = np.frombuffer(frames, dtype=np.int16).copy()
             if len(audio) == 0:
                 return
-            # Сигнатура водяного знака "VCLONE" (6 байт = 48 бит)
-            # Watermark signature "VCLONE" (6 bytes = 48 bits)
             signature = "VCLONE"
             bits = []
             for ch in signature:
-                # младший бит первым (LSB first)
-                # least significant bit first (LSB first)
                 for i in range(8):
                     bits.append((ord(ch) >> i) & 1)
-            # Встраиваем в первые min(48, len(audio)) отсчетов
-            # Embed into the first min(48, len(audio)) samples
             n_bits = min(len(bits), len(audio))
             for i in range(n_bits):
-                audio[i] = (audio[i] & 0xFE) | bits[i]   # обнуляем младший бит и ставим нужный / zero the LSB and set the needed bit
-            # Записываем обратно
-            # Write back
+                audio[i] = (audio[i] & 0xFE) | bits[i]
             with wave.open(file_path, 'wb') as wav:
                 wav.setparams(params)
                 wav.writeframes(audio.tobytes())
@@ -755,8 +658,6 @@ class VoiceCloningSystem:
             print(f"Synthesis error: {e}")
             raise
         if os.path.exists(output_path):
-            # Внедряем водяной знак
-            # Embed watermark
             self._embed_watermark(output_path)
             return output_path
         else:
@@ -883,8 +784,6 @@ class App:
         global TEXTS
         self.root = root
         self.settings = load_settings()
-        # Показываем предупреждение о законности использования (один раз)
-        # Show legal warning once
         if not self.settings.get("warning_acknowledged", False):
             messagebox.showwarning(
                 TEXTS.get("legal_warning_title", "Legal notice"),
@@ -1188,7 +1087,6 @@ class App:
         self.stop_btn.pack(side=tk.LEFT, padx=5)
 
     # ========== ВЫБОР ФАЙЛА (БЕЗ ЛИШНИХ ДИАЛОГОВ) ==========
-    # ========== FILE SELECTION (WITHOUT EXTRA DIALOGS) ==========
     def select_file(self, var, filetypes):
         initial_dir = INPUT_DIR
         if not os.path.exists(initial_dir):
@@ -1219,7 +1117,7 @@ class App:
             var.set(filename)
             self.update_buttons_state()
 
-    # ========== ОБНОВЛЕНИЕ СОСТОЯНИЙ / STATE UPDATES ==========
+    # ========== ОБНОВЛЕНИЕ СОСТОЯНИЙ ==========
     def update_rec_mode(self):
         if self.is_recording_stt or self.is_recording_ref:
             return
@@ -1301,7 +1199,7 @@ class App:
             self.update_rec_mode()
             self.update_ref_mode()
 
-    # ========== ЗАПИСЬ / RECORDING ==========
+    # ========== ЗАПИСЬ ==========
     def toggle_record(self):
         if self.is_recording_stt:
             self.recorder.stop_recording(self.current_record_filename)
@@ -1342,7 +1240,7 @@ class App:
             self.set_ui_enabled(False, skip_rec_buttons=True)
             self.record_btn.config(state=tk.DISABLED)
 
-    # ========== ЗАГРУЗКА TTS / TTS LOADING ==========
+    # ========== ЗАГРУЗКА TTS ==========
     def load_tts_model_background(self):
         if self._loading_tts:
             return
@@ -1378,15 +1276,13 @@ class App:
         messagebox.showerror(TEXTS.get("error_title", "Critical error"), message)
         self.root.quit()
 
-    # ========== УСТАНОВКА ПАКЕТА ПЕРЕВОДА / INSTALL TRANSLATION PACKAGE ==========
+    # ========== УСТАНОВКА ПАКЕТА ПЕРЕВОДА ==========
     def _install_translation_package(self, from_lang, to_lang):
         from_code = self.translator.get_language_code(from_lang, "argos")
         to_code = self.translator.get_language_code(to_lang, "argos")
         if not from_code or not to_code:
             return False
 
-        # Если перевод уже доступен (прямой или через английский)
-        # If translation is already available (direct or through English)
         if self.translator.is_translation_available(from_lang, to_lang):
             return True
 
@@ -1402,7 +1298,7 @@ class App:
                 return False
             return self._install_single_package(direct_package, from_lang, to_lang)
 
-        # ---------- Цепочка через английский / Chain via English ----------
+        # Цепочка через английский
         en_code = "en"
         en_pkg_from = next((pkg for pkg in available if pkg.from_code == from_code and pkg.to_code == en_code), None)
         en_pkg_to   = next((pkg for pkg in available if pkg.from_code == en_code and pkg.to_code == to_code), None)
@@ -1414,21 +1310,13 @@ class App:
             ))
             return False
 
-        # Проверяем, какие пакеты уже установлены
-        # Check which packages are already installed
         need_from = not self.translator.is_package_installed(from_lang, "English")
         need_to   = not self.translator.is_package_installed("English", to_lang)
 
         if not need_from and not need_to:
-            # Пакеты уже есть, но по какой-то причине is_translation_available вернул False
-            # Packages already exist, but for some reason is_translation_available returned False
-            # Обновляем кэш и пробуем ещё раз
-            # Update cache and try again
             self.translator._refresh_installed_languages()
             return self.translator.is_translation_available(from_lang, to_lang)
 
-        # Собираем сообщение для пользователя
-        # Collecting message for user
         msg = TEXTS.get("chain_package_question", "Direct package {0}->{1} not found.\nDo you want to install the chain via English?\nThis may affect translation quality.").format(from_lang, to_lang)
         if need_from:
             msg += f"\n\nWill install {from_lang} → English."
@@ -1438,8 +1326,6 @@ class App:
         if not answer:
             return False
 
-        # Устанавливаем только недостающие
-        # Install only the missing ones
         if need_from:
             if not self._install_single_package(en_pkg_from, from_lang, "English"):
                 return False
@@ -1468,7 +1354,7 @@ class App:
                                  TEXTS.get("package_install_fail", "Failed to install package: {}").format(e))
             return False
 
-    # ========== СКАЧИВАНИЕ ВСЕХ МОДЕЛЕЙ WHISPER / DOWNLOADING ALL WHISPER MODELS ==========
+    # ========== СКАЧИВАНИЕ ВСЕХ МОДЕЛЕЙ WHISPER ==========
     def download_all_whisper_models(self):
         def task():
             models = ["tiny", "base", "small", "medium", "large"]
@@ -1488,24 +1374,16 @@ class App:
                                                            TEXTS.get("downloading_whisper_complete", "All Whisper models have been downloaded.")))
         threading.Thread(target=task, daemon=True).start()
 
-    # ========== СКАЧИВАНИЕ ВСЕХ ПАКЕТОВ ARGOS (ТОЛЬКО ПОДДЕРЖИВАЕМЫЕ ЯЗЫКИ) / DOWNLOADING ALL ARGOS PACKAGES (ONLY SUPPORTED LANGUAGES) ==========
+    # ========== СКАЧИВАНИЕ ВСЕХ ПАКЕТОВ ARGOS (ТОЛЬКО ПОДДЕРЖИВАЕМЫЕ ЯЗЫКИ) ==========
     def download_all_argos_packages(self):
-        """Скачивает все языковые пакеты Argos Translate для языков, поддерживаемых программой.
-        Downloads all Argos Translate language packages for languages supported by the program."""
         def task():
             try:
-                # Получаем список всех доступных пакетов
-                # Get list of all available packages
                 all_packages = argostranslate.package.get_available_packages()
-                # Формируем набор кодов языков, поддерживаемых программой
-                # Build a set of language codes supported by the program
                 supported_codes = set()
                 for lang in self.translator.SUPPORTED_LANGUAGES.keys():
                     code = self.translator.get_language_code(lang, "argos")
                     if code:
                         supported_codes.add(code)
-                # Отбираем пакеты, у которых оба языка входят в поддерживаемые
-                # Filter packages where both from and to languages are supported
                 packages = [pkg for pkg in all_packages 
                         if pkg.from_code in supported_codes and pkg.to_code in supported_codes]
                 total = len(packages)
@@ -1520,8 +1398,6 @@ class App:
                     mode='determinate'
                 )
                 for i, pkg in enumerate(packages):
-                    # Пропускаем уже установленные пакеты
-                    # Skip already installed packages
                     if pkg in argostranslate.package.get_installed_packages():
                         continue
                     percent = int((i / total) * 100)
@@ -1543,7 +1419,7 @@ class App:
                 self.root.after(0, lambda: messagebox.showerror(TEXTS.get("error_title", "Error"), str(e)))
         threading.Thread(target=task, daemon=True).start()
 
-    # ========== РАСПОЗНАВАНИЕ / RECOGNITION ==========
+    # ========== РАСПОЗНАВАНИЕ ==========
     def recognize(self):
         input_path = self.stt_input_path.get()
         if not input_path or not os.path.exists(input_path):
@@ -1571,8 +1447,6 @@ class App:
                 self.root.after(0, lambda: self._set_recognized_text(original_text))
 
                 if do_translate and original_text.strip():
-                    # Проверяем доступность перевода (прямой или через английский)
-                    # Checking the availability of translation (direct or through English)
                     if not self.translator.is_translation_available(source_lang, target_lang):
                         self.root.after(0, lambda: self.stt_status.set(TEXTS.get("stt_status_checking_package", "Checking translation package...")))
                         installed = self._install_translation_package(source_lang, target_lang)
@@ -1584,8 +1458,6 @@ class App:
                                 with open(out_path, 'w', encoding='utf-8') as f:
                                     f.write(original_text)
                             return
-                        # После установки обновляем кэш
-                        # Updating cache after installation
                         self.translator._refresh_installed_languages()
 
                     self.stt_status.set(TEXTS.get("stt_status_translating", "Translating..."))
@@ -1610,7 +1482,7 @@ class App:
 
         threading.Thread(target=task, daemon=True).start()
 
-    # ========== СИНТЕЗ / SYNTHESIS ==========
+    # ========== СИНТЕЗ ==========
     def synthesize(self):
         if self.synth_mode.get() == "file":
             file_path = self.tts_text_file.get()
@@ -1650,7 +1522,6 @@ class App:
             nonlocal final_text
             try:
                 if need_translation and original_text.strip():
-                    # Проверяем доступность перевода (прямой или через английский)
                     if not self.translator.is_translation_available(source_lang, target_lang):
                         installed = self._install_translation_package(source_lang, target_lang)
                         if not installed:
