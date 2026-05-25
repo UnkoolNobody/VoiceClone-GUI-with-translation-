@@ -1187,8 +1187,7 @@ class App:
         self.stop_btn = ttk.Button(btn_frame, text=TEXTS.get("stop_button", "Stop"), command=self.stop_audio, state=tk.DISABLED)
         self.stop_btn.pack(side=tk.LEFT, padx=5)
 
-    # ========== ВЫБОР ФАЙЛА (БЕЗ ЛИШНИХ ДИАЛОГОВ) ==========
-    # ========== FILE SELECTION (WITHOUT EXTRA DIALOGS) ==========
+    # ========== ВЫБОР ФАЙЛА / FILE SELECTION ==========
     def select_file(self, var, filetypes):
         initial_dir = INPUT_DIR
         if not os.path.exists(initial_dir):
