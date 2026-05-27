@@ -1,36 +1,32 @@
 # -*- mode: python ; coding: utf-8 -*-
 import sys
 import os
-from PyInstaller.utils.hooks import collect_submodules, collect_data_files, copy_metadata, collect_dynamic_libs
+from PyInstaller.utils.hooks import collect_submodules, collect_data_files, copy_metadata
 
-# Увеличиваем лимит рекурсии (на случай больших графов импорта)
+# Увеличиваем лимит рекурсии
 sys.setrecursionlimit(100000)
 
-# Отключаем автоматическую компиляцию glib schema, вызывающую ошибку
+# Отключаем автоматическую компиляцию glib schema, вызывавшую ошибку
 import PyInstaller.utils.hooks.gi as gi_hook
 def noop(*args, **kwargs):
     return []
 gi_hook.compile_glib_schema_files = noop
 
-# Базовые настройки
 a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
     datas=[
-        # Копируем папку с локализациями (если существует)
-        ('locales', 'locales'),
-        # Создаём пустые папки для пользовательских файлов
-        ('input', 'input'),
-        ('output', 'output'),
-        ('input/reference_samples', 'input/reference_samples'),
+        ('locales', 'locales'),                       # папка с файлами локализации
+        ('input', 'input'),                           # папка для входных файлов
+        ('output', 'output'),                         # папка для выходных файлов
+        ('input/reference_samples', 'input/reference_samples'),  # образцы голоса
     ],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
-        # Исключаем ненужные большие модули, которые не используются в коде
         'matplotlib', 'IPython', 'jedi', 'parso', 'zmq',
         'pandas', 'tensorflow', 'tensorflow.*', 'keras', 'jax', 'flax',
         'notebook', 'jupyter_client', 'jupyter_core', 'ipykernel',
@@ -42,7 +38,7 @@ a = Analysis(
     noarchive=False,
 )
 
-# ========== Сбор всех подмодулей ==========
+# ========== СБОР ВСЕХ ПОДМОДУЛЕЙ ==========
 a.hiddenimports += collect_submodules('TTS')
 a.hiddenimports += collect_submodules('whisper')
 a.hiddenimports += collect_submodules('argostranslate')
@@ -70,11 +66,11 @@ a.hiddenimports += [
     'importlib.metadata',
 ]
 
-# ========== Добавление data-файлов ==========
+# ========== ДОБАВЛЕНИЕ DATA-ФАЙЛОВ ==========
 for pkg in ['TTS', 'argostranslate', 'transformers', 'whisper']:
     a.datas += collect_data_files(pkg)
 
-# Копируем метаданные пакетов (необходимы для проверки версий и entry-points)
+# Копируем метаданные пакетов
 for pkg in ['tqdm', 'regex', 'tokenizers', 'safetensors', 'packaging',
             'requests', 'filelock', 'pyyaml', 'numpy', 'argostranslate']:
     try:
@@ -82,24 +78,14 @@ for pkg in ['tqdm', 'regex', 'tokenizers', 'safetensors', 'packaging',
     except:
         pass
 
-# ========== Бинарные библиотеки (DLL, SO, DYLIB) ==========
-a.binaries += collect_dynamic_libs('sounddevice')
-a.binaries += collect_dynamic_libs('pygame')
-a.binaries += collect_dynamic_libs('webrtcvad')
-a.binaries += collect_dynamic_libs('torch')
-a.binaries += collect_dynamic_libs('torchaudio')
+# Фильтруем некорректные записи в a.binaries и a.datas (исправляет ошибку "not enough values to unpack")
+a.binaries = [entry for entry in a.binaries if len(entry) == 3]
+a.datas = [entry for entry in a.datas if len(entry) == 3]
 
-# Явно добавляем PyTorch CUDA-библиотеки (если используются)
-if os.name == 'nt':
-    # Windows
-    a.binaries += [('cudart64_*.dll', '.', 'BINARY')]
-    a.binaries += [('cublas64_*.dll', '.', 'BINARY')]
-    a.binaries += [('cudnn64_*.dll', '.', 'BINARY')]
-
-# ========== Сборка PYZ ==========
+# ========== СБОРКА PYZ ==========
 pyz = PYZ(a.pure)
 
-# ========== Сборка исполняемого файла ==========
+# ========== СБОРКА ИСПОЛНЯЕМОГО ФАЙЛА ==========
 exe = EXE(
     pyz,
     a.scripts,
@@ -111,7 +97,7 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    upx_exclude=['*.dll', '*.so', '*.dylib'],   # Исключаем бинарные библиотеки из сжатия UPX
+    upx_exclude=['*.dll', '*.so', '*.dylib'],   # исключаем бинарные библиотеки из сжатия UPX
     runtime_tmpdir=None,
     console=False,           # скрыть консольное окно (GUI)
     disable_windowed_traceback=False,
